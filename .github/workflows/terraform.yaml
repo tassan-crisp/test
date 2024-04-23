@@ -1,0 +1,87 @@
+name: "Terraform Workflow with Workload Identity"
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+
+env:
+  WORKING_DIR: ${{ inputs.working-directory }}
+
+jobs:
+  terraform:
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+    steps:
+      - uses: actions/checkout@v4.1.1
+
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: google-github-actions/auth@v1.1.1
+        with:
+          create_credentials_file: 'true'
+          workload_identity_provider: 'projects/1036098905197/locations/global/workloadIdentityPools/andrey-dev/providers/andrey-dev'
+          service_account: 'tf-dev-sa@sandbox-andrey-dev.iam.gserviceaccount.com'
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform fmt
+        id: fmt
+        run: terraform fmt -check
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color
+
+      - uses: actions/github-script@v6
+        if: github.ref != 'refs/heads/main'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+            
+            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+            
+            #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
+            
+            <details><summary>Validation Output</summary>
+            
+            \`\`\`terraform
+            ${{ steps.validate.outputs.stdout }}
+            \`\`\`
+            
+            </details>
+            
+            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+            
+            <details><summary>Show Plan</summary>
+            
+            \`\`\`terraform
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+            
+            </details>
+            
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Working Directory: \`${{ env.tf_actions_working_dir }}\`, Workflow: \`${{ github.workflow }}\`*`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })

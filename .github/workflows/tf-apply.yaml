@@ -1,0 +1,57 @@
+name: "TF Apply"
+
+on:
+  workflow_dispatch:
+    inputs:
+      working-directory:
+        description: 'The path to the directory containing the Terraform code'
+        required: true
+
+jobs:
+  terraform:
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.event.inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v4.1.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Output Inputs
+        run: echo "${{ toJSON(github.event.inputs) }}"
+
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: google-github-actions/auth@v1.1.1
+        with:
+          create_credentials_file: 'true'
+          workload_identity_provider: 'projects/1036098905197/locations/global/workloadIdentityPools/andrey-dev/providers/andrey-dev'
+          service_account: 'tf-dev-sa@sandbox-andrey-dev.iam.gserviceaccount.com'
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform fmt
+        id: fmt
+        run: terraform fmt -check
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color
+
+      - name: Terraform Apply
+        id: apply
+        shell: bash
+        run: terraform apply -auto-approve -input=false

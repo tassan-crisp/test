@@ -1,0 +1,15 @@
+name: "Sanbox Check"
+
+on:
+  pull_request:
+    types:
+      - opened # default
+      - synchronize # default
+      - reopened # default
+
+jobs:
+  tf-sandbox-check:
+    uses: ./.github/workflows/terraform.yaml
+    secrets: inherit
+    with:
+      working-directory: terraform
